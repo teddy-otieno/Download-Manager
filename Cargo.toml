@@ -1,0 +1,11 @@
+[package]
+name = "download_manager"
+version = "0.1.0"
+authors = ["Teddy <tedd.juma@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+threadpool = "1.7.1"
+chrono = "0.4.9"

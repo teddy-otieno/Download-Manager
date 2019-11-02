@@ -8,6 +8,7 @@ extern crate chrono;
 mod scheduler;
 mod download_handler;
 mod listener;
+mod tests;
 
 use download_handler::DownloadHandler;
 

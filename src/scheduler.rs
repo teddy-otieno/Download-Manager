@@ -48,11 +48,35 @@ impl<'a> Download<'a> {
         unimplemented!();
     }
 
-    pub fn to_bytes(&self) -> &[u8] {
-        let number: i32 = 1234;
+    pub fn to_generate_bytes(&self) -> Vec<u8> {
 
-        let bytes = number as u8 as char;
-        unimplemented!();
+        let download: &Download = self;
+
+        let mut download_bytes: Vec<u8> = Vec::new();
+        
+        //The first byte is the status
+        download_bytes.push(download.status.into());
+
+        //The next 8 bytes
+        download_bytes.extend_from_slice(&download.download_size.to_ne_bytes());
+
+        //The next 8bytes will be the current download size;
+        download_bytes.extend_from_slice(&download.current_download_size.to_ne_bytes());
+
+        //The next 8bytes will be the start of the download
+        download_bytes.extend_from_slice(&download.time_start.timestamp().to_ne_bytes());
+
+        //The next 8 bytes will store the time finished
+        download_bytes.extend_from_slice(&download.time_finished.timestamp().to_ne_bytes());
+
+        //The next 512 bytes will be to store the download ur
+        download_bytes.extend_from_slice(&download.url.as_bytes());
+
+        //The next 512 bytes will be to store the download_path
+        download_bytes.extend_from_slice(&download.download_path.as_bytes());
+
+
+        download_bytes
     }
 }
 

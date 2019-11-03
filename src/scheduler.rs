@@ -11,11 +11,16 @@ use threadpool::{ThreadPool, Builder};
 use crate::download_handler::DownloadHandle;
 
 
+#[derive(Debug, )]
+pub enum SchedulerError<'a>{
+    StringLengthTooLarge(&'a str),
+}
+
 pub struct Handle;
 
 #[derive(Copy, Clone)]
 pub enum DownloadStatus{
-    
+    Queued,    
 }
 
 impl From<u8> for DownloadStatus {
@@ -30,22 +35,60 @@ impl Into<u8> for DownloadStatus {
     }
 }
 
+fn convert_char_slice_to_u8(char_slice: &Vec<char>) -> Vec<u8> {
+    /*
+    * 1 char = 4 bytes
+    * The total size = 512 * 4 = 2048
+    */
+    let converted_bytes : Vec<u8> = Vec::with_capacity(2048);
+
+    for (index, element) in char_slice.into_iter().enumerate() {
+        let char_bytes: [u8; 4] = [0; 4];
+        element.encode_utf8(&mut char_bytes);
+
+        for byte in char_bytes.into_iter() {
+            converted_bytes.push(*byte);
+        }
+    }
+
+    return converted_bytes
+
+}
+
 pub struct Download<'a> {
     pub status: DownloadStatus,
-    pub download_size: u64, //Bytes
-    pub current_download_size: u64,
-    pub time_start: DateTime<Utc>,
-    pub time_finished: DateTime<Utc>,
-    pub time_stamp: DateTime<Utc>,
-    pub url: String,
-    pub download_path: String,
+    pub download_size: Option<u64>, //Bytes
+    pub current_download_size: Option<u64>,
+    pub time_start: Option<DateTime<Utc>>,
+    pub time_finished: Option<DateTime<Utc>>,
+    pub time_stamp: DateTime<Utc>, 
+    pub url: Vec<char>, // 2048 bytes
+    pub download_path: Vec<char>, //2048 bytes
     phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> Download<'a> {
-    pub fn new(url: String, path: String) -> Self{
+    pub fn new(url: String, path: String) -> Result<Self, SchedulerError<'a>>{
         
-        unimplemented!();
+        //Making sure the string doesnt go beyond 512 chars
+        if url.len() > 512 || path.len() > 512 {
+            return Err(SchedulerError::StringLengthTooLarge("The url or path len is too large"));
+        }
+
+        Ok(
+            Self {
+                status: DownloadStatus::Queued,
+                //TODO:
+                download_size: None,
+                current_download_size: None,
+                time_start: None,
+                time_finished: None,
+                time_stamp: Utc::now(),
+                url: url.chars().collect(),
+                download_path: path.chars().collect(),
+                phantom: PhantomData,
+            }
+        )
     }
 
     pub fn to_generate_bytes(&self) -> Vec<u8> {
@@ -58,24 +101,40 @@ impl<'a> Download<'a> {
         download_bytes.push(download.status.into());
 
         //The next 8 bytes
-        download_bytes.extend_from_slice(&download.download_size.to_ne_bytes());
+        download_bytes.extend_from_slice(match download.download_size {
+            Some(size) => &size.to_ne_bytes(),
+            None => &[0u8; 8]
+            }
+        );
 
-        //The next 8bytes will be the current download size;
-        download_bytes.extend_from_slice(&download.current_download_size.to_ne_bytes());
+        //The next 8bytes will be the current download size; TODO:
+        download_bytes.extend_from_slice(match download.current_download_size {
+            Some(size) => &size.to_ne_bytes(),
+            None => &[0u8; 8]
+            }
+        );
 
         //The next 8bytes will be the start of the download
-        download_bytes.extend_from_slice(&download.time_start.timestamp().to_ne_bytes());
+        download_bytes.extend_from_slice( match download.time_start {
+            Some(time) => &time.timestamp().to_ne_bytes(),
+            None => &[0u8; 8],
+            }
+        );
 
         //The next 8 bytes will store the time finished
-        download_bytes.extend_from_slice(&download.time_finished.timestamp().to_ne_bytes());
+        download_bytes.extend_from_slice( match download.time_finished {
+            Some(time) => &time.timestamp().to_ne_bytes(),
+            None => &[0u8; 8]
+        });
 
-        //The next 512 bytes will be to store the download ur
-        download_bytes.extend_from_slice(&download.url.as_bytes());
+        //The next 2048 bytes
+        download_bytes.extend(convert_char_slice_to_u8(&download.url));
 
-        //The next 512 bytes will be to store the download_path
-        download_bytes.extend_from_slice(&download.download_path.as_bytes());
+        //The next 2048 bytes
+        download_bytes.extend(convert_char_slice_to_u8(&download.download_path));
 
 
+        //Total number of bytes 4129
         download_bytes
     }
 }
@@ -95,4 +154,19 @@ impl<'a> Scheduler<'a> {
         unimplemented!();
     }
 
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::Download;    
+
+    #[test]
+    fn test_char_to_bytes_conversion() {
+
+        let test_download: Download = Download::new(String::from("foo"), String::from("bar")).unwrap();
+
+        assert_eq!(test_download.to_generate_bytes().len(), 4129);
+    }
 }

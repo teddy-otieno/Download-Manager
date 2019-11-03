@@ -38,7 +38,6 @@ enum DatabaseError<'a> {
 struct DownloadEntries {
     //Maximum string length
     download_url: String,
-    filesystem_download_path: String,
     //The number of bytes from the last_table_location_to to where it was appended,
     file_system_entry_position: u64,
 }
@@ -47,7 +46,6 @@ impl DownloadEntries {
     fn new(download_url: String, filesystem_download_path: String, file_system_location: u64) -> Self {
         Self {
             download_url: download_url,
-            filesystem_download_path: filesystem_download_path,
             file_system_entry_position: file_system_location,
         }
     }
@@ -70,7 +68,6 @@ struct DbTable<'a>{
     //The total number of entries in the database
     table_entries: Vec<DownloadEntries>,
     db_file: &'a str,
-    position_to_the_first_entry: u64,
 }
 
 impl<'a> DbTable<'a> {
@@ -78,7 +75,6 @@ impl<'a> DbTable<'a> {
         Self {
             table_entries: Vec::new(),
             db_file: file_path,
-            position_to_the_first_entry: 0,
         }
     }
 
@@ -178,26 +174,20 @@ impl<'a> DbTable<'a> {
 struct Database<'a>{
     download_records: Vec<Rc<Download<'a>>>,
     file_system_table: DbTable<'a>,
-    file: File,
     phantom: PhantomData<&'a ()>,
+    db_file_path: String
 }
 
 impl<'a> Database<'a> {
-    fn new() -> Self {
+    fn new(db_file_path: String) -> Self {
        //Load the file and read its contents
-        let file: File = match File::open(database_path) {
-            Ok(file) => file,
-            Err(_) => {
-                //Incase the file does not exist,
-                //Just create a file and return
-                File::create(database_path).ok().unwrap()
-            }
-        };
 
-        let mut buf_reader: BufReader<File> = BufReader::new(file);
-        
-        Self::parse_file(buf_reader.buffer());
-        unimplemented!();
+        Self {
+            download_records: Vec::new(),
+            file_system_table: DbTable::new(db_file_path.as_str()),
+            phantom: PhantomData,
+            db_file_path: db_file_path,
+        }
     }
 
     fn add_record(&mut self,download: Rc<Download<'a>>) {
@@ -213,19 +203,19 @@ impl<'a> Database<'a> {
          * First data
          *
          */
-
-        let _download_record_bytes: Vec<u8> = (*download).to_generate_bytes();
-
-        self.download_records.push(download);
-
-        let file: File = OpenOptions::new()
-            .write(true)
-            .open(database_path)
-            .unwrap();
-
         //Create the downoad_table
+        //
 
+        self.file_system_table.add_entry(&download);
 
+        //Append the new record to the file
+        let dbFile: File = OpenOptions::new()
+                                .append(true)
+                                .open(self.db_file_path.as_str()).unwrap();
+        
+        let download_metadata_buffer: Vec<u8> = (*download).to_generate_bytes();
+
+        assert_eq!(download_metadata_buffer.len(), 4129);
     }
 
     
@@ -259,7 +249,7 @@ impl<'a> DownloadHandler<'a>{
     }
 
     pub fn add_download(&mut self, url: String, filesystem_path: String) -> Result<Handle, String> {
-        let download: Rc<Download> = Rc::new(Download::new(url, filesystem_path));
+        let download: Rc<Download> = Rc::new(Download::new(url, filesystem_path).unwrap());
 
         self.downloads.push(Rc::downgrade(&download));
         self.database.add_record(download);
